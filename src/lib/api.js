@@ -25,7 +25,7 @@ export async function insertScore(name, score) {
   }
 }
 
-// Fetch top 10 scores from the database
+// Fetch all scores from the database
 export async function fetchTopScores() {
   if (!isSupabaseConfigured()) {
     console.warn('Supabase not configured - returning empty leaderboard');
@@ -37,8 +37,7 @@ export async function fetchTopScores() {
       .from('scores')
       .select('name, score, created_at')
       .order('score', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(10);
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Failed to fetch scores:', error);

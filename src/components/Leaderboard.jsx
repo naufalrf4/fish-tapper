@@ -67,25 +67,33 @@ function Leaderboard({ currentScore, onPlayAgain, isModal = false, onClose = nul
       )}
 
       {!loading && !error && scores.length > 0 && (
-        <div className="leaderboard__list">
-          <div className="leaderboard__header">
-            <span className="leaderboard__rank">Rank</span>
-            <span className="leaderboard__name">Name</span>
-            <span className="leaderboard__score">Score</span>
-            <span className="leaderboard__date">Date</span>
+        <>
+          <div className="leaderboard__stats">
+            <span>Total Players: {scores.length}</span>
+            {scores.length > 20 && <span className="leaderboard__scroll-hint">↓ Scroll for more</span>}
           </div>
-          {scores.map((score, index) => (
-            <div 
-              key={`${score.created_at}-${index}`} 
-              className={`leaderboard__row ${currentScore === score.score ? 'leaderboard__row--highlight' : ''}`}
-            >
-              <span className="leaderboard__rank">{getRankEmoji(index + 1)}</span>
-              <span className="leaderboard__name" dangerouslySetInnerHTML={{ __html: escapeHtml(score.name) }} />
-              <span className="leaderboard__score">{score.score}</span>
-              <span className="leaderboard__date">{formatDate(score.created_at)}</span>
+          <div className="leaderboard__list">
+            <div className="leaderboard__header">
+              <span className="leaderboard__rank">Rank</span>
+              <span className="leaderboard__name">Name</span>
+              <span className="leaderboard__score">Score</span>
+              <span className="leaderboard__date">Date</span>
             </div>
-          ))}
-        </div>
+            <div className="leaderboard__rows">
+              {scores.map((score, index) => (
+                <div 
+                  key={`${score.created_at}-${index}`} 
+                  className={`leaderboard__row ${currentScore === score.score ? 'leaderboard__row--highlight' : ''} ${index < 3 ? 'leaderboard__row--top' : ''}`}
+                >
+                  <span className="leaderboard__rank">{getRankEmoji(index + 1)}</span>
+                  <span className="leaderboard__name" dangerouslySetInnerHTML={{ __html: escapeHtml(score.name) }} />
+                  <span className="leaderboard__score">{score.score}</span>
+                  <span className="leaderboard__date">{formatDate(score.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       <div className="leaderboard__actions">

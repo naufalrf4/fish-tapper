@@ -4,12 +4,24 @@ import HUD from './HUD';
 
 const GAME_DURATION = 30; // seconds
 const FISH_RADIUS = 35;
-const INITIAL_FISH_MIN_LIFETIME = 1500; // ms - starts slower
-const INITIAL_FISH_MAX_LIFETIME = 2000; // ms
-const FINAL_FISH_MIN_LIFETIME = 600; // ms - gets faster
-const FINAL_FISH_MAX_LIFETIME = 900; // ms
-const INITIAL_SPAWN_DELAY = 800; // ms between spawns - starts slower
-const FINAL_SPAWN_DELAY = 200; // ms - gets faster
+
+// Early game (0-10s): Many fish, longer lifetime
+const EARLY_FISH_MIN_LIFETIME = 2000; // ms
+const EARLY_FISH_MAX_LIFETIME = 3000; // ms
+const EARLY_SPAWN_DELAY = 500; // ms between spawns
+const EARLY_SPAWN_COUNT = 5; // spawn 5 fish when clicked
+
+// Mid game (10-20s): Normal difficulty
+const MID_FISH_MIN_LIFETIME = 1500; // ms
+const MID_FISH_MAX_LIFETIME = 2000; // ms
+const MID_SPAWN_DELAY = 700; // ms
+const MID_SPAWN_COUNT = 3; // spawn 3 fish when clicked
+
+// End game (20-30s): Few fish, very short lifetime
+const END_FISH_MIN_LIFETIME = 500; // ms - very fast
+const END_FISH_MAX_LIFETIME = 800; // ms
+const END_SPAWN_DELAY = 1500; // ms - spawn less frequently
+const END_SPAWN_COUNT = 1; // spawn only 1 fish when clicked
 
 class Fish {
   constructor(x, y, id, lifetime) {
@@ -155,38 +167,104 @@ function GameCanvas({ playerName, onGameEnd }) {
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [gameActive, setGameActive] = useState(true);
+  const timeLeftRef = useRef(GAME_DURATION);
 
   const getDynamicDifficulty = useCallback(() => {
-    if (!gameStartRef.current) return { spawnDelay: INITIAL_SPAWN_DELAY, lifetime: INITIAL_FISH_MAX_LIFETIME };
+    if (!gameStartRef.current) {
+      return { 
+        spawnDelay: EARLY_SPAWN_DELAY, 
+        minLifetime: EARLY_FISH_MIN_LIFETIME,
+        maxLifetime: EARLY_FISH_MAX_LIFETIME,
+        spawnCount: EARLY_SPAWN_COUNT,
+        phase: 'early'
+      };
+    }
     
     const elapsed = (Date.now() - gameStartRef.current) / 1000;
-    const progress = Math.min(elapsed / GAME_DURATION, 1);
     
-    // Exponential difficulty curve for more noticeable progression
-    const difficultyFactor = Math.pow(progress, 1.5);
-    
-    const spawnDelay = INITIAL_SPAWN_DELAY - (INITIAL_SPAWN_DELAY - FINAL_SPAWN_DELAY) * difficultyFactor;
-    const minLifetime = INITIAL_FISH_MIN_LIFETIME - (INITIAL_FISH_MIN_LIFETIME - FINAL_FISH_MIN_LIFETIME) * difficultyFactor;
-    const maxLifetime = INITIAL_FISH_MAX_LIFETIME - (INITIAL_FISH_MAX_LIFETIME - FINAL_FISH_MAX_LIFETIME) * difficultyFactor;
-    const lifetime = minLifetime + Math.random() * (maxLifetime - minLifetime);
-    
-    return { spawnDelay, lifetime };
+    // Three phases of difficulty
+    if (elapsed < 10) {
+      // Early game: Many fish, easy
+      return {
+        spawnDelay: EARLY_SPAWN_DELAY,
+        minLifetime: EARLY_FISH_MIN_LIFETIME,
+        maxLifetime: EARLY_FISH_MAX_LIFETIME,
+        spawnCount: EARLY_SPAWN_COUNT,
+        phase: 'early'
+      };
+    } else if (elapsed < 20) {
+      // Mid game: Normal difficulty
+      return {
+        spawnDelay: MID_SPAWN_DELAY,
+        minLifetime: MID_FISH_MIN_LIFETIME,
+        maxLifetime: MID_FISH_MAX_LIFETIME,
+        spawnCount: MID_SPAWN_COUNT,
+        phase: 'mid'
+      };
+    } else {
+      // End game: Few fish, very hard
+      const endProgress = (elapsed - 20) / 10; // 0 to 1 for last 10 seconds
+      const scarcityFactor = Math.pow(endProgress, 2); // Exponential scarcity
+      
+      return {
+        spawnDelay: END_SPAWN_DELAY + scarcityFactor * 1000, // Gets even slower
+        minLifetime: END_FISH_MIN_LIFETIME * (1 - scarcityFactor * 0.5), // Gets even faster
+        maxLifetime: END_FISH_MAX_LIFETIME * (1 - scarcityFactor * 0.3),
+        spawnCount: END_SPAWN_COUNT,
+        phase: 'end'
+      };
+    }
   }, []);
 
-  const spawnFish = useCallback(() => {
+  const spawnFish = useCallback((count = 1, aroundPosition = null) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const { minLifetime, maxLifetime } = getDynamicDifficulty();
+    
+    for (let i = 0; i < count; i++) {
+      let pos;
+      if (aroundPosition) {
+        // Spawn around the clicked position
+        const angle = (Math.PI * 2 * i) / count;
+        const distance = 50 + Math.random() * 100;
+        pos = {
+          x: aroundPosition.x + Math.cos(angle) * distance,
+          y: aroundPosition.y + Math.sin(angle) * distance
+        };
+        // Keep within canvas bounds
+        pos.x = Math.max(FISH_RADIUS, Math.min(canvas.width - FISH_RADIUS, pos.x));
+        pos.y = Math.max(FISH_RADIUS, Math.min(canvas.height - FISH_RADIUS, pos.y));
+      } else {
+        pos = randomPosition(canvas.width, canvas.height, FISH_RADIUS + 30);
+      }
+      
+      const lifetime = minLifetime + Math.random() * (maxLifetime - minLifetime);
+      const fish = new Fish(pos.x, pos.y, nextFishIdRef.current++, lifetime);
+      fishRef.current.push(fish);
+    }
+  }, [getDynamicDifficulty]);
+  
+  const spawnFishPeriodically = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
     const now = Date.now();
-    const { spawnDelay, lifetime } = getDynamicDifficulty();
+    const { spawnDelay, phase } = getDynamicDifficulty();
     
     if (now - lastSpawnRef.current < spawnDelay) return;
-
-    const pos = randomPosition(canvas.width, canvas.height, FISH_RADIUS + 30);
-    const fish = new Fish(pos.x, pos.y, nextFishIdRef.current++, lifetime);
-    fishRef.current.push(fish);
+    
+    // In end phase, sometimes skip spawning to create scarcity
+    if (phase === 'end' && Math.random() > 0.6) {
+      lastSpawnRef.current = now;
+      return;
+    }
+    
+    // Spawn 1-2 fish randomly
+    const count = phase === 'early' ? 2 : 1;
+    spawnFish(count);
     lastSpawnRef.current = now;
-  }, [getDynamicDifficulty]);
+  }, [getDynamicDifficulty, spawnFish]);
 
   const handleCanvasInteraction = useCallback((e) => {
     if (!gameActive) return;
@@ -214,9 +292,11 @@ function GameCanvas({ playerName, onGameEnd }) {
     }
 
     let hitAny = false;
+    let hitPosition = null;
     for (const fish of fishRef.current) {
       if (fish.checkHit(x, y)) {
         hitAny = true;
+        hitPosition = { x: fish.x, y: fish.y };
         setScore(prev => {
           const newScore = prev + 1;
           scoreRef.current = newScore; // Update ref
@@ -224,6 +304,15 @@ function GameCanvas({ playerName, onGameEnd }) {
         });
         break; // Only hit one fish per click
       }
+    }
+    
+    // Spawn more fish when one is caught
+    if (hitAny && hitPosition) {
+      const { spawnCount } = getDynamicDifficulty();
+      // Spawn new fish around the caught fish position
+      setTimeout(() => {
+        spawnFish(spawnCount, hitPosition);
+      }, 100); // Small delay for visual effect
     }
 
     // Visual feedback with water splash effect
@@ -254,7 +343,7 @@ function GameCanvas({ playerName, onGameEnd }) {
         ctx.restore();
       }
     }
-  }, [gameActive]);
+  }, [gameActive, getDynamicDifficulty, spawnFish]);
 
   const gameLoop = useCallback(() => {
     const canvas = canvasRef.current;
@@ -324,16 +413,43 @@ function GameCanvas({ playerName, onGameEnd }) {
     fishRef.current = fishRef.current.filter(fish => fish.update());
     fishRef.current.forEach(fish => fish.draw(ctx));
 
-    // Spawn new fish
+    // Spawn new fish periodically
     if (gameActive) {
-      spawnFish();
+      spawnFishPeriodically();
+    }
+    
+    // Visual indicator for difficulty phase
+    const { phase } = getDynamicDifficulty();
+    if (phase === 'end' && gameActive) {
+      // Red tint overlay for final phase
+      ctx.save();
+      ctx.globalAlpha = 0.1;
+      ctx.fillStyle = '#FF0000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      
+      // Warning text
+      if (timeLeftRef.current <= 10 && timeLeftRef.current > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.3 + Math.sin(Date.now() * 0.01) * 0.2;
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#FF0000';
+        ctx.fillText('TIME RUNNING OUT!', canvas.width / 2, 100);
+        ctx.restore();
+      }
     }
 
     // Update timer - based only on elapsed time, not affected by score
     if (gameStartRef.current) {
       const elapsed = (Date.now() - gameStartRef.current) / 1000;
       const remaining = Math.max(0, GAME_DURATION - elapsed);
-      setTimeLeft(remaining);
+      
+      // Only update state if value actually changed (avoid decimal precision issues)
+      if (Math.abs(timeLeftRef.current - remaining) > 0.05) {
+        timeLeftRef.current = remaining;
+        setTimeLeft(remaining);
+      }
 
       if (remaining <= 0 && gameActive) {
         setGameActive(false);
@@ -344,7 +460,7 @@ function GameCanvas({ playerName, onGameEnd }) {
     }
 
     animationIdRef.current = requestAnimationFrame(gameLoop);
-  }, [gameActive, spawnFish, onGameEnd]); // Removed score from dependencies
+  }, [gameActive, spawnFishPeriodically, getDynamicDifficulty, onGameEnd]); // Removed timeLeft from dependencies
 
   // Initialize game
   useEffect(() => {
