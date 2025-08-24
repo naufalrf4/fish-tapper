@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="fishGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <ellipse cx="40" cy="50" rx="30" ry="20" fill="url(#fishGradient)" />
+  <polygon points="60,50 75,40 75,60" fill="url(#fishGradient)" />
+  <circle cx="25" cy="45" r="3" fill="white" />
+  <circle cx="25" cy="45" r="1.5" fill="black" />
+</svg>
